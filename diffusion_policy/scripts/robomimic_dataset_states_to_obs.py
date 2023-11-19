@@ -56,6 +56,7 @@ import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.env_utils as EnvUtils
 from robomimic.envs.env_base import EnvBase
 from diffusion_policy.common.mesh_utils import meshwrite
+from diffusion_policy.common.camera_utils import CameraMover
 
 
 def extract_trajectory(
@@ -64,6 +65,9 @@ def extract_trajectory(
     states, 
     actions,
     done_mode,
+    free_camera_name,
+    angle_low,
+    angle_high
 ):
     """
     Helper function to extract observations, rewards, and dones along a trajectory using
@@ -83,6 +87,15 @@ def extract_trajectory(
 
     # load the initial state
     env.reset()
+
+    if free_camera_name is not None:
+        camera_mover = CameraMover(
+            env=env.env,
+            camera=free_camera_name
+        )
+        rot_angle = np.random.uniform(angle_low, angle_high)
+        camera_mover.rotate_camera_world(point=[0, 0, 0], axis=[0.0, 0.0, 1.0], angle=rot_angle, rel_init=True)
+
     obs = env.reset_to(initial_state)
 
     traj = dict(
@@ -220,6 +233,9 @@ def dataset_states_to_obs(args):
             states=states, 
             actions=actions,
             done_mode=args.done_mode,
+            free_camera_name=args.free_camera_name,
+            angle_low=args.angle_low,
+            angle_high=args.angle_high,
         )
 
         # maybe copy reward or done signal from source file
@@ -342,12 +358,32 @@ if __name__ == "__main__":
         action='store_true',
         help="(optional) copy rewards from source file instead of inferring them",
     )
-
+    
     # flag for copying dones from source file instead of re-writing them
     parser.add_argument(
         "--copy_dones", 
         action='store_true',
         help="(optional) copy dones from source file instead of inferring them",
+    )
+
+    # free camera
+    parser.add_argument(
+        "--free_camera_name", 
+        type=str,
+        default=None,
+        help="free camera with random rotation about z-axis",
+    )
+    parser.add_argument(
+        "--angle_low", 
+        type=float,
+        default=None,
+        help="low value of rotation about z-axis",
+    )
+    parser.add_argument(
+        "--angle_high", 
+        type=float,
+        default=None,
+        help="high value of rotation about z-axis",
     )
 
     args = parser.parse_args()
@@ -359,4 +395,8 @@ python diffusion_policy/scripts/robomimic_dataset_states_to_obs.py --dataset dat
 python diffusion_policy/scripts/robomimic_dataset_states_to_obs.py --dataset data/robomimic/datasets/tool_hang/ph/image.hdf5 --output_name depth.hdf5 --camera_depths
 python diffusion_policy/scripts/robomimic_dataset_states_to_obs.py --dataset data/robomimic/datasets/transport/mh/image.hdf5 --output_name depth.hdf5 --camera_depths
 python diffusion_policy/scripts/robomimic_dataset_states_to_obs.py --dataset data/robomimic/datasets/transport/ph/image.hdf5 --output_name depth.hdf5 --camera_depths
+
+
+python diffusion_policy/scripts/robomimic_dataset_states_to_obs.py --dataset data/robomimic/datasets/tool_hang/ph/image.hdf5 --output_name depth_random_z.hdf5 --camera_depths --free_camera_name sideview --angle_low -45 --angle_high 45 --n 1
+
 """

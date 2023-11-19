@@ -287,6 +287,7 @@ class CameraMover:
 
         # Set initial camera pose
         self.set_camera_pose(pos=init_camera_pos, quat=init_camera_quat)
+        self.init_camera_pos, self.init_camera_quat = self.get_camera_pose()
 
     def set_camera_pose(self, pos=None, quat=None):
         """
@@ -317,7 +318,7 @@ class CameraMover:
         pos = self.env.sim.data.get_mocap_pos(self.mover_body_name)
         quat = T.convert_quat(self.env.sim.data.get_mocap_quat(self.mover_body_name), to="xyzw")
 
-        return pos, quat
+        return pos.copy(), quat.copy()
 
     def modify_xml_for_camera_movement(self, xml, camera_name):
         """
@@ -416,7 +417,41 @@ class CameraMover:
         self.set_camera_pose(pos=camera_pos)
 
         return camera_pos, camera_quat
+    
+    def rotate_camera_world(self, point, axis, angle, rel_init=False):
+        """
+        Rotate the camera view about a direction (in the world frame).
 
+        Args:
+            point (None or 3-array): (x,y,z) cartesian coordinates about which to rotate camera in camera frame. If None,
+                assumes the point is the current location of the camera
+            axis (3-array): (ax,ay,az) axis about which to rotate camera in camera frame
+            angle (float): how much to rotate about that direction
+
+        Returns:
+            2-tuple:
+                pos: (x,y,z) updated camera position
+                quat: (x,y,z,w) updated camera quaternion orientation
+        """
+        # current camera rotation + pos
+        camera_pos = np.array(self.env.sim.data.get_mocap_pos(self.mover_body_name))
+        camera_quat = T.convert_quat(self.env.sim.data.get_mocap_quat(self.mover_body_name), to="xyzw")
+        if rel_init:
+            camera_pos, camera_quat = self.init_camera_pos.copy(), self.init_camera_quat.copy()
+        camera_rot = T.quat2mat(camera_quat)
+        # rotate by angle and direction to get new camera rotation
+        rad = np.pi * angle / 180.0
+        R = T.rotation_matrix(rad, axis, point=point)
+        camera_pose = np.zeros((4, 4))
+        camera_pose[:3, :3] = camera_rot
+        camera_pose[:3, 3] = camera_pos
+        camera_pose = R @ camera_pose
+
+        # Update camera pose
+        pos, quat = camera_pose[:3, 3], T.mat2quat(camera_pose[:3, :3])
+        self.set_camera_pose(pos=pos, quat=quat)
+
+        return pos, quat
 
 class DemoPlaybackCameraMover(CameraMover):
     """

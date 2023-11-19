@@ -10,18 +10,18 @@ import collections
 
 import matplotlib.pyplot as plt
 import numpy as np
-import robomimic
 import robomimic.utils.env_utils as EnvUtils
 import robomimic.utils.file_utils as FileUtils
 import robomimic.utils.obs_utils as ObsUtils
-import robomimic.utils.test_utils as TestUtils
-import robomimic.utils.torch_utils as TorchUtils
+import robosuite.utils.transform_utils as T
 import yaml
 from robomimic.algo import algo_factory
 from robomimic.config import config_factory
 from robomimic.utils.dataset import SequenceDataset
 
-dataset_path = 'data/robomimic/datasets/transport/ph/image.hdf5'
+from diffusion_policy.common.camera_utils import CameraMover
+
+dataset_path = 'data/robomimic/datasets/tool_hang/ph/image.hdf5'
 
 # default BC config
 config = config_factory(algo_name="bc")
@@ -35,12 +35,12 @@ obs:
     agentview_image:
         shape: [3, 84, 84]
         type: rgb
+    sideview_image:
+        shape: [3, 84, 84]
+        type: rgb
     robot0_eye_in_hand_image:
         shape: [3, 84, 84]
         type: rgb
-    robot0_eye_in_hand_depth:
-        shape: [3, 84, 84]
-        type: depth
     robot0_eef_pos:
         shape: [3]
         # type default: low_dim
@@ -57,7 +57,6 @@ for key, attr in shape_meta['obs'].items():
     modality_mapping[attr.get('type', 'low_dim')].append(key)
 ObsUtils.initialize_obs_modality_mapping_from_dict(modality_mapping)
 
-#%%
 env_meta = FileUtils.get_env_metadata_from_dataset(dataset_path)
 # env_meta['env_kwargs']['camera_depths'] = True
 env = EnvUtils.create_env_from_metadata(
@@ -68,7 +67,31 @@ env = EnvUtils.create_env_from_metadata(
 )
 
 obs = env.reset()
+print(obs.keys())
 # plt.imshow(obs['agentview_image'].transpose([1, 2, 0]))
+
+#%%
+camera_mover = CameraMover(
+    env=env.env,
+    # camera='agentview'
+    camera='sideview'
+)
+camera_mover.rotate_camera_world(point=[0, 0, 0], axis=[0.0, 0.0, 1.0], angle=90, rel_init=True)
+# plt.imshow(env.get_observation()['agentview_image'].transpose([1, 2, 0]))
+plt.imshow(env.get_observation()['sideview_image'].transpose([1, 2, 0]))
+
+
+obs, reward, done, info = env.step(np.ones(7))
+
+camera_pos, camera_quat_wxyz = camera_mover.get_camera_pose()
+camera_quat_xyzw = T.convert_quat(camera_quat_wxyz, to="xyzw")
+camera_rot = T.quat2mat(camera_quat_xyzw)
+
+camera_quat_inv_xyzw = T.quat_inverse(camera_quat_xyzw)
+camera_rot_inv = T.quat2mat(camera_quat_inv_xyzw)
+
+dist = np.linalg.norm(camera_pos)
+
 
 # #%%
 # for i in range(10):
